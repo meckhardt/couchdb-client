@@ -35,7 +35,10 @@ use Doctrine\CouchDB\View\DesignDocument;
  */
 class CouchDBClient
 {
-   /**
+    /** string \ufff0 */
+    const COLLATION_END = "\xEF\xBF\xB0";
+
+    /**
      * Name of the CouchDB database
      *
      * @string
@@ -45,7 +48,7 @@ class CouchDBClient
     /**
      * The underlying HTTP Connection of the used DocumentManager.
      *
-     * @var Doctrine\ODM\CouchDB\HTTP\Client
+     * @var Client
      */
     private $httpClient;
 
@@ -66,6 +69,7 @@ class CouchDBClient
      *
      * @param array $options
      * @return CouchDBClient
+     * @throws \InvalidArgumentException
      */
     static public function create(array $options)
     {
@@ -73,16 +77,16 @@ class CouchDBClient
             throw new \InvalidArgumentException("'dbname' is a required option to create a CouchDBClient");
         }
 
-        $defaults = array('type' => 'socket', 'host' => 'localhost', 'port' => 5984, 'user' => null, 'password' => null, 'ip' => null, 'logging' => false);
+        $defaults = array('type' => 'socket', 'host' => 'localhost', 'port' => 5984, 'user' => null, 'password' => null, 'ip' => null, 'logging' => false, 'timeout' => 0.01);
         $options = array_merge($defaults, $options);
 
         if (!isset(self::$clients[$options['type']])) {
-            throw new \InvalidArgumentException(sprintf('There is no client implementation registered for %s, valid options are %s',
-                $options['type'], array_keys(self::$clients)
+            throw new \InvalidArgumentException(sprintf('There is no client implementation registered for %s, valid options are: %s',
+                $options['type'], implode(", ", array_keys(self::$clients))
             ));
         }
         $connectionClass = self::$clients[$options['type']];
-        $connection = new $connectionClass($options['host'], $options['port'], $options['user'], $options['password'], $options['ip']);
+        $connection = new $connectionClass($options['host'], $options['port'], $options['user'], $options['password'], $options['ip'], $options['timeout']);
         if ($options['logging'] === true) {
             $connection = new HTTP\LoggingClient($connection);
         }
@@ -105,7 +109,7 @@ class CouchDBClient
     }
 
     /**
-     * @return HttpClient
+     * @return Client
      */
     public function getHttpClient()
     {
@@ -122,6 +126,7 @@ class CouchDBClient
      *
      * @param  int $count
      * @return array
+     * @throws CouchDBException
      */
     public function getUuids($count = 1)
     {
@@ -139,7 +144,7 @@ class CouchDBClient
      * Find a document by ID and return the HTTP response.
      *
      * @param  string $id
-     * @return Response
+     * @return HTTP\Response
      */
     public function findDocument($id)
     {
@@ -151,7 +156,9 @@ class CouchDBClient
      * Find many documents by passing their ids and return the HTTP response.
      *
      * @param array $ids
-     * @return array
+     * @param null $limit
+     * @param null $offset
+     * @return HTTP\Response
      */
     public function findDocuments(array $ids, $limit = null, $offset = null)
     {
@@ -173,7 +180,7 @@ class CouchDBClient
      *
      * @param int|null $limit
      * @param string|null $startKey
-     * @return array
+     * @return HTTP\Response
      */
     public function allDocs($limit = null, $startKey = null)
     {
@@ -259,6 +266,7 @@ class CouchDBClient
      *
      * @param  string $name
      * @return array
+     * @throws HTTPException
      */
     public function getDatabaseInfo($name)
     {
@@ -276,11 +284,25 @@ class CouchDBClient
      *
      * @param  array $params
      * @return array
+     * @throws HTTPException
      */
-    public function getChanges(array $params = null)
+    public function getChanges(array $params = array())
     {
         $path = '/' . $this->databaseName . '/_changes';
-        $response = $this->httpClient->request('GET', $path, $params);
+
+        if (count($params) > 0) {
+
+            foreach ($params as $key => $value) {
+                if (isset($params[$key]) === true && is_bool($value) === true) {
+                    $params[$key] = ($value) ? 'true': 'false';
+                }
+            }
+
+            $query = http_build_query($params);
+            $path = $path.'?'.$query;
+        }
+
+        $response = $this->httpClient->request('GET', $path);
 
         if ($response->status != 200) {
             throw HTTPException::fromResponse($path, $response);
@@ -304,6 +326,7 @@ class CouchDBClient
      *
      * @param  array $data
      * @return array<id, rev>
+     * @throws HTTPException
      */
     public function postDocument(array $data)
     {
@@ -324,6 +347,7 @@ class CouchDBClient
      * @param string $id
      * @param string|null $rev
      * @return array<id, rev>
+     * @throws HTTPException
      */
     public function putDocument($data, $id, $rev = null)
     {
@@ -348,6 +372,7 @@ class CouchDBClient
      * @param  string $id
      * @param  string $rev
      * @return void
+     * @throws HTTPException
      */
     public function deleteDocument($id, $rev)
     {
@@ -403,6 +428,7 @@ class CouchDBClient
      * Return array of data about compaction status.
      *
      * @return array
+     * @throws HTTPException
      */
     public function getCompactInfo()
     {
@@ -418,6 +444,7 @@ class CouchDBClient
      * POST /db/_compact
      *
      * @return array
+     * @throws HTTPException
      */
     public function compactDatabase()
     {
@@ -434,6 +461,7 @@ class CouchDBClient
      *
      * @param string $designDoc
      * @return array
+     * @throws HTTPException
      */
     public function compactView($designDoc)
     {
@@ -449,6 +477,7 @@ class CouchDBClient
      * POST /db/_view_cleanup
      *
      * @return array
+     * @throws HTTPException
      */
     public function viewCleanup()
     {
@@ -471,6 +500,7 @@ class CouchDBClient
      * @param array|null $ids
      * @param string|null $proxy
      * @return array
+     * @throws HTTPException
      */
     public function replicate($source, $target, $cancel = null, $continuous = null, $filter = null, array $ids = null, $proxy = null)
     {

@@ -46,13 +46,14 @@ class SocketClient extends AbstractHTTPClient
      * establish the connection, if not done yet.
      *
      * @return void
+     * @throws HTTPException
      */
     protected function checkConnection()
     {
         // If the connection could not be established, fsockopen sadly does not
         // only return false (as documented), but also always issues a warning.
         if ( ( $this->connection === null ) &&
-             ( ( $this->connection = @fsockopen( $this->options['ip'], $this->options['port'], $errno, $errstr ) ) === false ) )
+             ( ( $this->connection = @fsockopen( $this->options['ip'], $this->options['port'], $errno, $errstr, $this->options['timeout'] ) ) === false ) )
         {
             // This is a bit hackisch...
             $this->connection = null;
@@ -92,13 +93,13 @@ class SocketClient extends AbstractHTTPClient
         // initilization costs low, especially when the database server is not
         // available in the locale net.
         $request .= "Connection: " . ( $this->options['keep-alive'] ? 'Keep-Alive' : 'Close' ) . "\r\n";
+        $request .= "Content-type: application/json\r\n";
 
         // Also add headers and request body if data should be sent to the
         // server. Otherwise just add the closing mark for the header section
         // of the request.
         if ( $data !== null )
         {
-            $request .= "Content-type: application/json\r\n";
             $request .= "Content-Length: " . strlen( $data ) . "\r\n\r\n";
             $request .= "$data";
         }

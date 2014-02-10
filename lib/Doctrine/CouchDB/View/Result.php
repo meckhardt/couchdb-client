@@ -28,6 +28,11 @@ class Result implements \IteratorAggregate, \Countable, \ArrayAccess
         $this->result = $result;
     }
 
+    public function getTotalRows()
+    {
+        return $this->result['total_rows'];
+    }
+
     public function getIterator()
     {
         return new \ArrayIterator($this->result['rows']);
@@ -50,12 +55,12 @@ class Result implements \IteratorAggregate, \Countable, \ArrayAccess
 
     public function offsetSet($offset, $value)
     {
-        throw new \BadMethodCallException("LuceneResult is immutable and cannot be changed.");
+        throw new \BadMethodCallException("Result is immutable and cannot be changed.");
     }
 
     public function offsetUnset($offset)
     {
-        throw new \BadMethodCallException("LuceneResult is immutable and cannot be changed.");
+        throw new \BadMethodCallException("Result is immutable and cannot be changed.");
     }
 
     public function toArray()
